@@ -2,9 +2,11 @@
 #define __STDC_WANT_LIB_EXT1__ 1
 
 #include "arena.h"
+#include "error.h"
 
 #include <assert.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,29 +15,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#define ARENA_DEBUG
+#define DO_DEBUG
 
-#define handle_error(msg)                                                      \
-    do {                                                                       \
-        perror(msg);                                                           \
-        exit(1);                                                               \
-    } while (0)
-
-void dbg(const char *fmt, ...) {
-#ifdef ARENA_DEBUG
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-#endif
-}
-
-#define dbg_line(fmt, ...)                                                     \
-    do {                                                                       \
-        dbg("[%s:%lu] " fmt, __FILE__, __LINE__, __VA_ARGS__);                 \
-    } while (0)
-
-#define dbg_line_no_fmt(msg) dbg_line(msg "%s", "")
+volatile arena_t **thread_arenas = NULL;
 
 struct arena_t {
     size_t offset;
@@ -84,6 +66,43 @@ enum AllocResult {
 #define DEFAULT_ALIGNMENT (2 * sizeof(void *))
 #endif
 
+
+// -------------------------------------------------
+// GLOBAL ARENA COLLECTION
+// -------------------------------------------------
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+void global_arena_init(void) {
+    arena_t **globals = thread_arenas;
+    if (globals == NULL) {
+        pthread_mutex_lock(&mutex);
+        globals = thread_arenas;
+        if (globals == NULL) {
+            globals = malloc(sizeof(arena_t *) * 4);
+            thread_arenas = globals;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+}
+
+void global_arena_delete(void) {
+    arena_t **globals = thread_arenas;
+    if (globals != NULL) {
+        pthread_mutex_lock(&mutex);
+        globals = thread_arenas;
+        if (globals != NULL) {
+            free(globals);
+            thread_arenas = NULL;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+}
+
+
+// -------------------------------------------------
+// ARENA HELPER FUNCTIONS
+// -------------------------------------------------
+
 /// Helper function to the `arena_new` function,
 /// reserves the page-aligned amount of virtual
 /// memory as defined by MAX_ALLOC_SPACE, but does
@@ -128,6 +147,12 @@ void print_arena_info(const arena_t *arena);
 void print_temp_info(const arena_temp_t *temp);
 void print_arena(const arena_t *arena);
 
+
+
+// DEFINITIONS
+
+
+
 arena_t *arena_new(void) {
     long page_size = sysconf(_SC_PAGE_SIZE);
     if (page_size == -1)
@@ -145,18 +170,22 @@ arena_t *arena_new(void) {
         return NULL;
     }
 
-    arena_t arena = {.buf = addr + sizeof(arena_t),
-                     .num_pages = 1,
-                     .offset = 0,
-                     .first = NULL,
-                     .last = NULL,
-                     .page_size = page_size};
+    arena_t arena = {
+        .buf = addr + sizeof(arena_t),
+        .num_pages = 1,
+        .offset = 0,
+        .first = NULL,
+        .last = NULL,
+        .page_size = page_size
+    };
 
 #ifdef __STDC_LIB_EXT1__
     (void)memcpy_s(addr, sizeof(arena_t), &arena, sizeof(arena_t));
 #else
     (void)memcpy(addr, &arena, sizeof(arena_t));
 #endif
+
+
     return (arena_t *)addr;
 }
 
