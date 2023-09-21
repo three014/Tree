@@ -3,6 +3,7 @@
 
 #include "arena.h"
 #include "error.h"
+#include "hashmap.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -16,8 +17,6 @@
 #include <unistd.h>
 
 #define DO_DEBUG
-
-volatile arena_t **thread_arenas = NULL;
 
 struct arena_t {
     size_t offset;
@@ -71,31 +70,61 @@ enum AllocResult {
 // GLOBAL ARENA COLLECTION
 // -------------------------------------------------
 
+static volatile hashmap_t *thread_arenas = NULL;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-void global_arena_init(void) {
-    arena_t **globals = thread_arenas;
-    if (globals == NULL) {
+
+/// Returns a pointer to the global arena collection.
+/// If it doesn't exist, this function initializes
+/// it and returns a pointer to that allocation.
+hashmap_t *global_get(void) {
+    hashmap_t *global = thread_arenas;
+    if (global == NULL) {
         pthread_mutex_lock(&mutex);
-        globals = thread_arenas;
-        if (globals == NULL) {
-            globals = malloc(sizeof(arena_t *) * 4);
-            thread_arenas = globals;
+        global = thread_arenas;
+        if (global == NULL) {
+            global = hashmap_new();
+            thread_arenas = global;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+    return global;
+}
+
+void global_free(void) {
+    hashmap_t *global = thread_arenas;
+    if (global != NULL) {
+        pthread_mutex_lock(&mutex);
+        global = thread_arenas;
+        if (global != NULL) {
+            // HASHMAP MUST BE EMPTY HERE OR ELSE 
+            // THIS WILL LEAK ARENA ALLOCATORS
+            hashmap_delete(global);
+            thread_arenas = NULL;
         }
         pthread_mutex_unlock(&mutex);
     }
 }
 
-void global_arena_delete(void) {
-    arena_t **globals = thread_arenas;
-    if (globals != NULL) {
-        pthread_mutex_lock(&mutex);
-        globals = thread_arenas;
-        if (globals != NULL) {
-            free(globals);
-            thread_arenas = NULL;
-        }
-        pthread_mutex_unlock(&mutex);
-    }
+int global_insert(arena_t *arena) {
+    hashmap_t *global = global_get();
+    pthread_t self = pthread_self();
+    pthread_mutex_lock(&mutex);
+    int success = hashmap_insert(global, (size_t) self, (void *) arena);
+    pthread_mutex_unlock(&mutex);
+    return success;
+}
+
+arena_t *global_remove(void) {
+    hashmap_t *global = global_get();
+    pthread_t self = pthread_self();
+    pthread_mutex_lock(&mutex);
+    arena_t *arena = hashmap_remove(global, (size_t) self);
+    pthread_mutex_unlock(&mutex);
+    return arena;
+}
+
+arena_t *arena_get(void) {
+
 }
 
 
