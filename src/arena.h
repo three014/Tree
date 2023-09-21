@@ -10,14 +10,10 @@ extern "C" {
 typedef struct arena_t arena_t;
 typedef struct arena_temp_t arena_temp_t;
 
-/// Allocates memory for an arena
-/// and returns a pointer to it.
-arena_t *arena_new(void);
-
 /// Resets the arena's buffer offset
 /// to 0, effectively clearing out
 /// the internal buffer.
-void arena_clear(arena_t *arena);
+void arena_clear(void);
 
 /// Allocates `size` bytes within the
 /// arena and returns a pointer to the
@@ -28,11 +24,17 @@ void arena_clear(arena_t *arena);
 /// calling this function while a temp arena
 /// for this arena is active will return a
 /// NULL pointer.
-void *arena_alloc(arena_t *arena, const size_t size);
+void *arena_alloc(const size_t size);
 
 /// Completely frees all memory
 /// associated with arena, including itself.
-void arena_delete(arena_t *arena);
+void arena_delete(void);
+
+/// This function does not do anything with
+/// the supplied pointer; it was added for
+/// completion and for compatability with
+/// allocator-types.
+void arena_free(void *_unused) {}
 
 /// Creates a handle to an existing arena and
 /// that arena's current offset. The returned
@@ -46,16 +48,13 @@ void arena_delete(arena_t *arena);
 /// own allocations, as those allocations won't
 /// be permanent and would be deallocated upon
 /// deallocating the temp arenas.
-arena_temp_t *arena_temp_new(arena_t *arena);
-
-/// Just like `arena_temp_new`, creates a handle
-/// to an existing arena and its current offset.
-/// However, keep track of these temporary arenas,
+///
+/// Keep track of these temporary arenas,
 /// as freeing one temp will free all the temps
 /// created after that one, AND all temps need
 /// to be freed before an arena can be used to 
 /// create persistent allocations again.
-arena_temp_t *arena_temp_from_temp(arena_temp_t *temp);
+arena_temp_t *arena_temp_new(void);
 
 /// Allocates `size` bytes on the arena that `temp`
 /// originated from and returns a pointer to the 

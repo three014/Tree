@@ -123,8 +123,22 @@ arena_t *global_remove(void) {
     return arena;
 }
 
-arena_t *arena_get(void) {
+arena_t *global_view(void) {
+    hashmap_t *global = global_get();
+    pthread_t self = pthread_self();
+    pthread_mutex_lock(&mutex);
+    arena_t *arena = hashmap_get(global, (size_t) self);
+    pthread_mutex_unlock(&mutex);
+    return arena;
+}
 
+int global_is_empty(void) {
+    hashmap_t *global = global_get();
+    pthread_t self = pthread_self();
+    pthread_mutex_lock(&mutex);
+    int empty = hashmap_is_empty(global);
+    pthread_mutex_unlock(&mutex);
+    return empty;
 }
 
 
@@ -141,19 +155,19 @@ arena_t *arena_get(void) {
 /// mapping, or NULL if the mapping failed.
 /// It is recommended to handle this failure
 /// by exiting out of the program.
-void *reserve_mem(const size_t pagesize);
+static void *reserve_mem(const size_t pagesize);
 
 /// Attempts to map a new page of physical memory using mmap(). If
 /// successful, returns ALLOC_SUCCESS, otherwise the mapping failed
 /// and the result should be handled.
-enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size);
+static enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size);
 
 /// Aligns the address with the specified alignment and returns the
 /// new address that the next allocation should start at.
-uintptr_t align(const uintptr_t ptr, const size_t alignment);
+static uintptr_t align(const uintptr_t ptr, const size_t alignment);
 
 /// Returns 1 if true, 0 if false.
-int is_power_of_two(const uintptr_t x);
+inline int is_power_of_two(const uintptr_t x);
 
 /// Attempts to allocate memory with the given arena, but will
 /// return NULL if the arena has any temp arenas attached to itself.
@@ -176,11 +190,14 @@ void print_arena_info(const arena_t *arena);
 void print_temp_info(const arena_temp_t *temp);
 void print_arena(const arena_t *arena);
 
+/// Allocates memory for an arena
+/// and returns a pointer to it.
+arena_t *arena_new(void);
 
 
-// DEFINITIONS
-
-
+// --------------------------------------------------------------
+// ARENA ALLOCATOR DEFINITIONS
+// --------------------------------------------------------------
 
 arena_t *arena_new(void) {
     long page_size = sysconf(_SC_PAGE_SIZE);
@@ -214,11 +231,15 @@ arena_t *arena_new(void) {
     (void)memcpy(addr, &arena, sizeof(arena_t));
 #endif
 
+    int success = global_insert((arena_t *)addr);
+    if (!success) {
+        handle_error("There can't be more than one arena per thread right now!");
+    }
 
     return (arena_t *)addr;
 }
 
-void *reserve_mem(const size_t page_size) {
+static void *reserve_mem(const size_t page_size) {
     size_t max_alloc_space = MAX_ALLOC_SPACE;
     size_t max_num_pages = max_alloc_space / page_size;
     size_t total_page_size = max_num_pages * page_size;
@@ -230,7 +251,11 @@ void *reserve_mem(const size_t page_size) {
                 MAP_ANONYMOUS | MAP_NORESERVE | MAP_PRIVATE, -1, 0);
 }
 
-void *arena_alloc(arena_t *arena, const size_t size) {
+void *arena_alloc(const size_t size) {
+    arena_t *arena = global_view();
+    if (arena == NULL) {
+        arena = arena_new();
+    }
     return alloc_checked(arena, size);
 }
 
@@ -277,7 +302,7 @@ void *alloc_unchecked(arena_t *arena, const size_t size) {
     return ret;
 }
 
-uintptr_t align(const uintptr_t ptr, const size_t alignment) {
+static uintptr_t align(const uintptr_t ptr, const size_t alignment) {
     assert(is_power_of_two(alignment));
 
     uintptr_t ret = ptr;
@@ -295,7 +320,7 @@ uintptr_t align(const uintptr_t ptr, const size_t alignment) {
 
 int is_power_of_two(const uintptr_t x) { return (x & (x - 1)) == 0; }
 
-enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size) {
+static enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size) {
     const uintptr_t max_alloc_space = MAX_ALLOC_SPACE;
     if (new_arena_size >= max_alloc_space - arena->page_size) {
         return OUT_OF_VIRT;
@@ -318,21 +343,39 @@ enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size) {
     return ALLOC_SUCCESS;
 }
 
-void arena_delete(arena_t *arena) {
+void arena_delete(void) {
+    arena_t *arena = global_remove();
+    if (arena == NULL) return;
     if (munmap(arena, MAX_ALLOC_SPACE) == -1) {
         dbg("%s\n", strerror(errno));
     }
+
+    if (global_is_empty()) {
+        global_free();
+    }
 }
 
-void arena_clear(arena_t *arena) {
-    arena->offset = 0;
-    arena->first = NULL;
-    arena->last = NULL;
+void arena_clear(void) {
+    arena_t *arena = global_view();
+    if (arena != NULL) {
+        arena->offset = 0;
+        arena->first = NULL;
+        arena->last = NULL;
+    }
 }
 
-arena_temp_t *arena_temp_new(arena_t *arena) {
+arena_temp_t *arena_temp_new(void) {
+    arena_t *arena = global_view();
+    if (arena == NULL) {
+        arena = arena_new();
+    }
+
     arena_temp_t tmp = {
-        .arena = arena, .saved_offset = arena->offset, .next = NULL};
+        .arena = arena, 
+        .saved_offset = arena->offset, 
+        .next = NULL
+    };
+
     arena_temp_t *temp_arena = alloc_unchecked(arena, sizeof(arena_temp_t));
     if (temp_arena != NULL) {
 #ifdef __STDC_LIB_EXT1__
@@ -351,10 +394,6 @@ arena_temp_t *arena_temp_new(arena_t *arena) {
     }
 
     return temp_arena;
-}
-
-arena_temp_t *arena_temp_from_temp(arena_temp_t *temp) {
-    return arena_temp_new(temp->arena);
 }
 
 void *arena_temp_alloc(arena_temp_t *temp, const size_t size) {

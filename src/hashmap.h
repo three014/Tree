@@ -10,7 +10,6 @@ void hashmap_delete(hashmap_t *map);
 void *hashmap_get(hashmap_t *map, size_t key);
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
 void *hashmap_remove(hashmap_t *map, size_t key);
-
-
+int hashmap_is_empty(hashmap_t *map);
 
 #endif
