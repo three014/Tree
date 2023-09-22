@@ -1,6 +1,7 @@
 #include "hashmap.h"
 #include "error.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,10 +28,6 @@ struct hashmap_t {
     int seed;
     vector_t buf;
 };
-
-inline int key_eq(kv_t *left, kv_t *right) {
-    return left->key == right->key;
-}
 
 // ----------------------------------------------------
 // Murmur3 32-bit Hash Algorithm
@@ -81,6 +78,54 @@ uint32_t murmur3_32(const uint8_t *key, size_t len, uint32_t seed) {
 }
 
 // ----------------------------------------------------
+// Vector/Bucket Functions
+// ----------------------------------------------------
+
+inline int key_eq(kv_t *left, kv_t *right) {
+    return left->key == right->key;
+}
+
+size_t max(size_t left, size_t right) {
+    if (left >= right) {
+        return left;
+    }
+    return right;
+}
+
+void bucket_reserve(bucket_t *bucket, size_t len) {
+    size_t new_cap = bucket->len + 1;
+
+    new_cap = max(bucket->cap * 2, new_cap);
+#define CEILING 4
+    new_cap = max(CEILING, new_cap);
+#undef CEILING
+
+    void *new_ptr = realloc(bucket->pairs, new_cap);
+    if (!new_ptr) handle_error(strerror(errno));
+    bucket->pairs = new_ptr;
+    bucket->cap = new_cap;
+}
+
+void *bucket_remove(bucket_t *bucket, size_t idx) {
+    if (bucket == NULL || idx >= bucket->len) return NULL;
+    kv_t *ptr = bucket->pairs + (uintptr_t) idx;
+    void *ret = ptr->val;
+    (void) memmove(ptr, ptr + 1, bucket->len - idx - 1);
+    bucket->len--;
+    return ret;
+}
+
+void bucket_push(bucket_t *bucket, kv_t kv) {
+    if (bucket->len == bucket->cap) {
+        bucket_reserve(bucket, bucket->len);
+    }
+
+    kv_t *end = bucket->pairs + (uintptr_t) bucket->len;
+    (*end) = kv;
+    bucket->len++;
+}
+
+// ----------------------------------------------------
 // Hashmap Function Definitions
 // ----------------------------------------------------
 
@@ -99,8 +144,9 @@ hashmap_t *hashmap_new(void) {
     return map;
 }
 
+void hashmap_delete(hashmap_t *map) {
 
-void hashmap_delete(hashmap_t *map);
+}
 void *hashmap_get(hashmap_t *map, size_t key);
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
 void *hashmap_remove(hashmap_t *map, size_t key);

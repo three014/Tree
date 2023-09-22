@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#define __STDC_WANT_LIB_EXT1__ 1
 
 #include "arena.h"
 #include "error.h"
@@ -115,6 +114,7 @@ int global_insert(arena_t *arena) {
 }
 
 arena_t *global_remove(void) {
+    if (!global_exists()) return NULL;
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
@@ -124,6 +124,7 @@ arena_t *global_remove(void) {
 }
 
 arena_t *global_view(void) {
+    if (!global_exists()) return NULL;
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
@@ -133,12 +134,18 @@ arena_t *global_view(void) {
 }
 
 int global_is_empty(void) {
+    if (!global_exists()) return 1;
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
     int empty = hashmap_is_empty(global);
     pthread_mutex_unlock(&mutex);
     return empty;
+}
+
+int global_exists(void) {
+    hashmap_t *global = thread_arenas;
+    return global != NULL;
 }
 
 
@@ -225,13 +232,9 @@ arena_t *arena_new(void) {
         .page_size = page_size
     };
 
-#ifdef __STDC_LIB_EXT1__
-    (void)memcpy_s(addr, sizeof(arena_t), &arena, sizeof(arena_t));
-#else
-    (void)memcpy(addr, &arena, sizeof(arena_t));
-#endif
+    (void) memcpy(addr, &arena, sizeof(arena_t));
 
-    int success = global_insert((arena_t *)addr);
+    int success = global_insert((arena_t *) addr);
     if (!success) {
         handle_error("There can't be more than one arena per thread right now!");
     }
@@ -269,9 +272,9 @@ void *alloc_checked(arena_t *arena, const size_t size) {
 }
 
 void *alloc_unchecked(arena_t *arena, const size_t size) {
-    const uintptr_t cur_addr = (uintptr_t)arena->buf + (uintptr_t)arena->offset;
+    const uintptr_t cur_addr = (uintptr_t) arena->buf + (uintptr_t) arena->offset;
     const uintptr_t offset = align(cur_addr, DEFAULT_ALIGNMENT);
-    const uintptr_t arena_size = offset - (uintptr_t)arena;
+    const uintptr_t arena_size = offset - (uintptr_t) arena;
 
     dbg_line("cur_addr = %lu\n", cur_addr);
     dbg_line("offset = %lu\n", offset);
@@ -293,11 +296,7 @@ void *alloc_unchecked(arena_t *arena, const size_t size) {
     void *ret = arena->buf + relative_offset;
     arena->offset = relative_offset + size;
 
-#ifdef __STDC_LIB_EXT1__
-    (void)memset_s(ret, size, 0, size);
-#else
-    (void)memset(ret, 0, size);
-#endif
+    (void) memset(ret, 0, size);
 
     return ret;
 }
@@ -378,12 +377,7 @@ arena_temp_t *arena_temp_new(void) {
 
     arena_temp_t *temp_arena = alloc_unchecked(arena, sizeof(arena_temp_t));
     if (temp_arena != NULL) {
-#ifdef __STDC_LIB_EXT1__
-        (void)memcpy_s(temp_arena, sizeof(arena_temp_t), &tmp,
-                       sizeof(arena_temp_t));
-#else
-        (void)memcpy(temp_arena, &tmp, sizeof(arena_temp_t));
-#endif
+        (void) memcpy(temp_arena, &tmp, sizeof(arena_temp_t));
         arena_temp_t *last = arena->last;
         if (last != NULL) {
             last->next = temp_arena;
