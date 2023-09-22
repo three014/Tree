@@ -70,6 +70,11 @@ enum AllocResult {
 static volatile hashmap_t *thread_arenas = NULL;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int global_exists(void) {
+    hashmap_t *global = thread_arenas;
+    return global != NULL;
+}
+
 /// Returns a pointer to the global arena collection.
 /// If it doesn't exist, this function initializes
 /// it and returns a pointer to that allocation.
@@ -139,11 +144,6 @@ int global_is_empty(void) {
     int empty = hashmap_is_empty(global);
     pthread_mutex_unlock(&mutex);
     return empty;
-}
-
-int global_exists(void) {
-    hashmap_t *global = thread_arenas;
-    return global != NULL;
 }
 
 

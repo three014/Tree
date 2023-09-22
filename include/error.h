@@ -14,7 +14,8 @@ extern "C" {
         exit(1);                                                               \
     } while (0)
 
-void dbg(const char *fmt, ...) {
+static void dbg(const char *fmt, ...) 
+{
 #ifdef DO_DEBUG
     va_list ap;
     va_start(ap, fmt);

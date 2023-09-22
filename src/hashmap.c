@@ -1,3 +1,5 @@
+#define DO_DEBUG
+
 #include "hashmap.h"
 #include "error.h"
 
@@ -8,9 +10,9 @@
 #include <time.h>
 
 typedef struct {
-    size_t len;
-    bucket_t *buf;
-} vector_t;
+    size_t key;
+    void *val;
+} kv_t;
 
 typedef struct {
     size_t len;
@@ -19,9 +21,9 @@ typedef struct {
 } bucket_t;
 
 typedef struct {
-    size_t key;
-    void *val;
-} kv_t;
+    size_t len;
+    bucket_t *buf;
+} vector_t;
 
 struct hashmap_t {
     int seed;

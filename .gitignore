@@ -50,3 +50,22 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Autotools
+ar-lib
+config.*
+configure~
+configure
+depcomp
+libtool
+ltmain.sh
+stamp-h1
+.deps/
+m4/*
+*.in
+autom4te.cache/
+install-sh
+missing
+compile
+aclocal.m4
+Makefile
