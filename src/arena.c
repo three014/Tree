@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#define DO_DEBUG
 
 #include "arena.h"
 #include "error.h"
@@ -7,15 +8,12 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
-
-#define DO_DEBUG
 
 struct arena_t {
     size_t offset;

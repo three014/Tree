@@ -7,13 +7,12 @@
 #include <stdlib.h>
 #include <time.h>
 
-typedef struct vector_t {
+typedef struct {
     size_t len;
-    size_t cap;
     bucket_t *buf;
 } vector_t;
 
-typedef struct bucket_t {
+typedef struct {
     size_t len;
     size_t cap;
     kv_t *pairs;
@@ -26,7 +25,7 @@ typedef struct {
 
 struct hashmap_t {
     int seed;
-    vector_t buf;
+    vector_t buckets;
 };
 
 // ----------------------------------------------------
@@ -138,7 +137,7 @@ hashmap_t *hashmap_new(void) {
 
     (*map) = (hashmap_t) {
         .seed = time(0),
-        .buf = {0}
+        .buckets = {0}
     };
 
     return map;

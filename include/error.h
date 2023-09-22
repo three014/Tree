@@ -1,6 +1,9 @@
 #ifndef __ERROR_H
 #define __ERROR_H
 
+#include <stdio.h>
+#include <stdarg.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
