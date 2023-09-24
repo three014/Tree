@@ -160,6 +160,7 @@ void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
         }
         free(map->buckets.buf);
     }
+    free(map);
 }
 
 void *hashmap_get(hashmap_t *map, size_t key);
