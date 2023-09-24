@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#define DO_DEBUG
 
 #include "arena.h"
 #include "error.h"
@@ -100,7 +99,7 @@ void global_free(void) {
         if (global != NULL) {
             // HASHMAP MUST BE EMPTY HERE OR ELSE 
             // THIS WILL LEAK ARENA ALLOCATORS
-            hashmap_delete(global);
+            hashmap_delete(global, NULL);
             thread_arenas = NULL;
         }
         pthread_mutex_unlock(&mutex);

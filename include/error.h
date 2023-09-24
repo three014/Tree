@@ -16,7 +16,7 @@ extern "C" {
 
 static void dbg(const char *fmt, ...) 
 {
-#ifdef DO_DEBUG
+#ifndef NDEBUG
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);

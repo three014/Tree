@@ -6,7 +6,7 @@
 typedef struct hashmap_t hashmap_t;
 
 hashmap_t *hashmap_new(void);
-void hashmap_delete(hashmap_t *map);
+void hashmap_delete(hashmap_t *map, void (*val_free)(void *val));
 void *hashmap_get(hashmap_t *map, size_t key);
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
 void *hashmap_remove(hashmap_t *map, size_t key);

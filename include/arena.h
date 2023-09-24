@@ -11,8 +11,8 @@ typedef struct arena_t arena_t;
 typedef struct arena_temp_t arena_temp_t;
 
 /// Resets the arena's buffer offset
-/// to 0, effectively clearing out
-/// the internal buffer.
+/// to 0, effectively freeing all the
+/// allocated memory.
 void arena_clear(void);
 
 /// Allocates `size` bytes within the
@@ -24,7 +24,7 @@ void arena_clear(void);
 /// calling this function while a temp arena
 /// for this arena is active will return a
 /// NULL pointer.
-void *arena_alloc(const size_t size);
+void *arena_alloc(const size_t __size);
 
 /// Completely frees all memory
 /// associated with arena, including itself.
@@ -59,7 +59,7 @@ arena_temp_t *arena_temp_new(void);
 /// Allocates `size` bytes on the arena that `temp`
 /// originated from and returns a pointer to the 
 /// start of the allocation.
-void *arena_temp_alloc(arena_temp_t *temp, const size_t size);
+void *arena_temp_alloc(arena_temp_t *temp, const size_t __size);
 
 /// Deletes a temp arena and returns the original arena's
 /// offset to the one stored in this temp arena. If 

@@ -1,5 +1,3 @@
-#define DO_DEBUG
-
 #include "hashmap.h"
 #include "error.h"
 
@@ -23,11 +21,11 @@ typedef struct {
 typedef struct {
     size_t len;
     bucket_t *buf;
-} vector_t;
+} container_t;
 
 struct hashmap_t {
     int seed;
-    vector_t buckets;
+    container_t buckets;
 };
 
 // ----------------------------------------------------
@@ -86,7 +84,7 @@ inline int key_eq(kv_t *left, kv_t *right) {
     return left->key == right->key;
 }
 
-size_t max(size_t left, size_t right) {
+inline size_t max(size_t left, size_t right) {
     if (left >= right) {
         return left;
     }
@@ -132,10 +130,7 @@ void bucket_push(bucket_t *bucket, kv_t kv) {
 
 hashmap_t *hashmap_new(void) {
     hashmap_t *map = malloc(sizeof(hashmap_t));
-    if (!map) {
-        dbg_line_no_fmt("Can't allocate memory for hashmap!\n");
-        return NULL;
-    }
+    if (!map) handle_error(strerror(errno));
 
     (*map) = (hashmap_t) {
         .seed = time(0),
@@ -145,9 +140,28 @@ hashmap_t *hashmap_new(void) {
     return map;
 }
 
-void hashmap_delete(hashmap_t *map) {
-
+void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
+    if (!map) return;
+    if (val_free != NULL) {
+        for (size_t i = 0; i < map->buckets.len; i++) {
+            bucket_t *bucket = map->buckets.buf + i;
+            if (bucket->cap == 0) continue;
+            for (size_t j = 0; j < bucket->len; j++) {
+                val_free(bucket->pairs->val);
+            }
+            free(bucket->pairs);
+        }
+        free(map->buckets.buf);
+    } else {
+        for (size_t i = 0; i < map->buckets.len; i++) {
+            bucket_t *bucket = map->buckets.buf + i;
+            if (bucket->cap == 0) continue;
+            free(bucket->pairs);
+        }
+        free(map->buckets.buf);
+    }
 }
+
 void *hashmap_get(hashmap_t *map, size_t key);
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
 void *hashmap_remove(hashmap_t *map, size_t key);
