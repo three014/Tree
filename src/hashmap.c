@@ -124,6 +124,7 @@ void bucket_push(bucket_t *bucket, kv_t kv) {
     bucket->len++;
 }
 
+
 // ----------------------------------------------------
 // Hashmap Function Definitions
 // ----------------------------------------------------
@@ -164,7 +165,25 @@ void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
 }
 
 void *hashmap_get(hashmap_t *map, size_t key) {
-    if (!map) return NULL;
+    if (!map || !map->buckets.buf) return NULL;
+
+    // Get bucket from hashed key
+    size_t hashed_key = murmur3_32(
+        (const uint8_t *)&key,
+        sizeof(size_t),
+        map->seed
+    );
+    size_t index = hashed_key % map->buckets.len;
+    bucket_t *bucket = map->buckets.buf + index;
+
+    if (bucket->cap == 0) return NULL;
+    for (size_t i = 0; i < bucket->len; i++) {
+        kv_t *pair = bucket->pairs + i;
+        if (pair->key == key) {
+            return pair->val;
+        }
+    }
+
     return NULL;
 }
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
