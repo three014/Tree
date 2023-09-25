@@ -47,11 +47,11 @@ uint32_t murmur3_32(const uint8_t *key, size_t len, uint32_t seed) {
     for (size_t i = len >> 2; i; i--) {
         // Here is a source of differing results across endiannesses.
         // A swap here has no effects on hash properties though.
-       (void) memcpy(&k, key, sizeof(uint32_t));
-       key += sizeof(uint32_t);
-       h ^= murmur_32_scramble(k);
-       h = (h << 13) | (h >> 19);
-       h = h * 5 + 0xe6546b64;
+        (void)memcpy(&k, key, sizeof(uint32_t));
+        key += sizeof(uint32_t);
+        h ^= murmur_32_scramble(k);
+        h = (h << 13) | (h >> 19);
+        h = h * 5 + 0xe6546b64;
     }
 
     /* Read the rest. */
@@ -95,9 +95,9 @@ void bucket_reserve(bucket_t *bucket, size_t len) {
     size_t new_cap = bucket->len + 1;
 
     new_cap = max(bucket->cap * 2, new_cap);
-#define CEILING 4
-    new_cap = max(CEILING, new_cap);
-#undef CEILING
+#define __CEILING 4
+    new_cap = max(__CEILING, new_cap);
+#undef __CEILING
 
     void *new_ptr = realloc(bucket->pairs, new_cap);
     if (!new_ptr) handle_error(strerror(errno));
@@ -107,9 +107,9 @@ void bucket_reserve(bucket_t *bucket, size_t len) {
 
 void *bucket_remove(bucket_t *bucket, size_t idx) {
     if (bucket == NULL || idx >= bucket->len) return NULL;
-    kv_t *ptr = bucket->pairs + (uintptr_t) idx;
+    kv_t *ptr = bucket->pairs + (uintptr_t)idx;
     void *ret = ptr->val;
-    (void) memmove(ptr, ptr + 1, bucket->len - idx - 1);
+    (void)memmove(ptr, ptr + 1, bucket->len - idx - 1);
     bucket->len--;
     return ret;
 }
@@ -163,7 +163,10 @@ void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
     free(map);
 }
 
-void *hashmap_get(hashmap_t *map, size_t key);
+void *hashmap_get(hashmap_t *map, size_t key) {
+    if (!map) return NULL;
+    return NULL;
+}
 int hashmap_insert(hashmap_t *map, size_t key, void *val);
 void *hashmap_remove(hashmap_t *map, size_t key);
 int hashmap_is_empty(hashmap_t *map);

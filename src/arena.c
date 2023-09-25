@@ -70,7 +70,7 @@ static volatile hashmap_t *thread_arenas = NULL;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int global_exists(void) {
-    hashmap_t *global = thread_arenas;
+    hashmap_t *global = (hashmap_t *)thread_arenas;
     return global != NULL;
 }
 
@@ -78,10 +78,10 @@ int global_exists(void) {
 /// If it doesn't exist, this function initializes
 /// it and returns a pointer to that allocation.
 hashmap_t *global_get(void) {
-    hashmap_t *global = thread_arenas;
+    hashmap_t *global = (hashmap_t *)thread_arenas;
     if (global == NULL) {
         pthread_mutex_lock(&mutex);
-        global = thread_arenas;
+        global = (hashmap_t *)thread_arenas;
         if (global == NULL) {
             global = hashmap_new();
             thread_arenas = global;
@@ -92,10 +92,10 @@ hashmap_t *global_get(void) {
 }
 
 void global_free(void) {
-    hashmap_t *global = thread_arenas;
+    hashmap_t *global = (hashmap_t *)thread_arenas;
     if (global != NULL) {
         pthread_mutex_lock(&mutex);
-        global = thread_arenas;
+        global = (hashmap_t *)thread_arenas;
         if (global != NULL) {
             // HASHMAP MUST BE EMPTY HERE OR ELSE 
             // THIS WILL LEAK ARENA ALLOCATORS
@@ -138,7 +138,6 @@ arena_t *global_view(void) {
 int global_is_empty(void) {
     if (!global_exists()) return 1;
     hashmap_t *global = global_get();
-    pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
     int empty = hashmap_is_empty(global);
     pthread_mutex_unlock(&mutex);
@@ -221,7 +220,7 @@ arena_t *arena_new(void) {
     }
 
     arena_t arena = {
-        .buf = addr + sizeof(arena_t),
+        .buf = (void *)((uintptr_t) addr + sizeof(arena_t)),
         .num_pages = 1,
         .offset = 0,
         .first = NULL,
@@ -269,9 +268,9 @@ void *alloc_checked(arena_t *arena, const size_t size) {
 }
 
 void *alloc_unchecked(arena_t *arena, const size_t size) {
-    const uintptr_t cur_addr = (uintptr_t) arena->buf + (uintptr_t) arena->offset;
+    const uintptr_t cur_addr = (uintptr_t)arena->buf + (uintptr_t)arena->offset;
     const uintptr_t offset = align(cur_addr, DEFAULT_ALIGNMENT);
-    const uintptr_t arena_size = offset - (uintptr_t) arena;
+    const uintptr_t arena_size = offset - (uintptr_t)arena;
 
     dbg_line("cur_addr = %lu\n", cur_addr);
     dbg_line("offset = %lu\n", offset);
@@ -290,10 +289,10 @@ void *alloc_unchecked(arena_t *arena, const size_t size) {
     }
 
     const uintptr_t relative_offset = offset - (uintptr_t)arena->buf;
-    void *ret = arena->buf + relative_offset;
+    void *ret = (void *)((uintptr_t)arena->buf + relative_offset);
     arena->offset = relative_offset + size;
 
-    (void) memset(ret, 0, size);
+    (void)memset(ret, 0, size);
 
     return ret;
 }
@@ -478,3 +477,4 @@ void print_temp_info(const arena_temp_t *temp) {
         dbg("NULL");
     }
 }
+

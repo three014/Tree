@@ -53,6 +53,10 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# Clangd
+.cache/
+compile_commands.json
+
 # Autotools
 ar-lib
 config.*
