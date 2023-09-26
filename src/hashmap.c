@@ -2,10 +2,15 @@
 #include "error.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+
+#define __TRUE 1
+#define __FALSE 0
+#define __CEILING 4
 
 typedef struct {
     size_t key;
@@ -19,6 +24,7 @@ typedef struct {
 } bucket_t;
 
 typedef struct {
+    size_t size;
     size_t len;
     bucket_t *buf;
 } container_t;
@@ -91,15 +97,13 @@ inline size_t max(size_t left, size_t right) {
     return right;
 }
 
-void bucket_reserve(bucket_t *bucket, size_t len) {
+static void __bucket_reserve(bucket_t *bucket, size_t len) {
     size_t new_cap = bucket->len + 1;
 
     new_cap = max(bucket->cap * 2, new_cap);
-#define __CEILING 4
     new_cap = max(__CEILING, new_cap);
-#undef __CEILING
 
-    void *new_ptr = realloc(bucket->pairs, new_cap);
+    void *new_ptr = realloc(bucket->pairs, sizeof(kv_t) * new_cap);
     if (!new_ptr) handle_error(strerror(errno));
     bucket->pairs = new_ptr;
     bucket->cap = new_cap;
@@ -116,12 +120,52 @@ void *bucket_remove(bucket_t *bucket, size_t idx) {
 
 void bucket_push(bucket_t *bucket, kv_t kv) {
     if (bucket->len == bucket->cap) {
-        bucket_reserve(bucket, bucket->len);
+        __bucket_reserve(bucket, bucket->len);
     }
 
     kv_t *end = bucket->pairs + (uintptr_t) bucket->len;
     (*end) = kv;
     bucket->len++;
+}
+
+/// Creates a new empty container table that has double the
+/// length of the container that was passed in.
+///
+/// Does nothing to the original container. Returns a
+/// container struct with the parameters of the grown table,
+/// with the buffer already allocated.
+static container_t __container_grow(const container_t *container) {
+    size_t new_len = container->len + 1;
+    new_len = max(container->len * 2, new_len);
+    new_len = max(__CEILING, new_len);
+
+    size_t new_len_u8 = sizeof(bucket_t) * new_len;
+    void *new_ptr = malloc(new_len_u8);
+    if (!new_ptr) handle_error(strerror(errno));
+    (void)memset(new_ptr, 0, new_len_u8);
+
+    return (container_t) {
+        .size = container->size,
+        .len = new_len,
+        .buf = new_ptr
+    };
+}
+
+static void __container_delete(container_t *container) {
+    if (!container) return;
+
+    for (size_t i = 0; i < container->len; i++) {
+        bucket_t *bucket = container->buf + i;
+        if (bucket->cap == 0) continue;
+        free(bucket->pairs);
+    }
+    free(container->buf);
+
+    (*container) = (container_t) {
+        .size = 0,
+        .len = 0,
+        .buf = NULL
+    };
 }
 
 
@@ -154,14 +198,39 @@ void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
         }
         free(map->buckets.buf);
     } else {
-        for (size_t i = 0; i < map->buckets.len; i++) {
-            bucket_t *bucket = map->buckets.buf + i;
-            if (bucket->cap == 0) continue;
-            free(bucket->pairs);
-        }
-        free(map->buckets.buf);
+        __container_delete(&map->buckets);
     }
     free(map);
+}
+
+static void __hashmap_rehash(hashmap_t *map) {
+    container_t new_buckets = __container_grow(&map->buckets);
+
+    for (size_t i = 0; i < map->buckets.len; i++) {
+        bucket_t *bucket = map->buckets.buf + i;
+        if (bucket->cap == 0) continue;
+        for (size_t j = 0; j < bucket->len; j++) {
+            kv_t *pair = bucket->pairs + j;
+
+            // Hash key again
+            size_t hashed_key = murmur3_32(
+                (const uint8_t *)&pair->key,
+                sizeof(size_t),
+                map->seed
+            );
+            size_t index = hashed_key % new_buckets.len;
+            bucket_t *new_bucket = new_buckets.buf + index;
+
+            // Insert key/value pair into new bucket
+            bucket_push(new_bucket, *pair);
+        }
+    }
+
+    // Delete old container
+    __container_delete(&map->buckets);
+
+    // Replace with new container
+    map->buckets = new_buckets;
 }
 
 void *hashmap_get(hashmap_t *map, size_t key) {
@@ -186,6 +255,24 @@ void *hashmap_get(hashmap_t *map, size_t key) {
 
     return NULL;
 }
-int hashmap_insert(hashmap_t *map, size_t key, void *val);
-void *hashmap_remove(hashmap_t *map, size_t key);
-int hashmap_is_empty(hashmap_t *map);
+
+int hashmap_insert(hashmap_t *map, size_t key, void *val) {
+    if (!map) return __FALSE;
+
+    // Get bucket from hashed key
+    if (map->buckets.len <= map->buckets.size * 4) {
+        __hashmap_rehash(map); // EXPENSIVE
+    }
+
+
+
+    return __FALSE;
+}
+
+void *hashmap_remove(hashmap_t *map, size_t key) {
+    return NULL;
+}
+
+int hashmap_is_empty(hashmap_t *map) {
+    return (map) ? map->buckets.size == 0 : __TRUE;
+}
