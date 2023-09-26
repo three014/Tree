@@ -75,3 +75,6 @@ missing
 compile
 aclocal.m4
 Makefile
+
+# Tests
+test-driver

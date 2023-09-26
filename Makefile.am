@@ -1,4 +1,4 @@
-SUBDIRS = src
+SUBDIRS = src . test
 ACLOCAL_AMFLAGS = -Im4
 
 clean-local:
