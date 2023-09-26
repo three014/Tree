@@ -81,3 +81,4 @@ test-driver
 *.log
 *.trs
 check_bamboo
+check_hashmap

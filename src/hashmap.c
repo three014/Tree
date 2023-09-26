@@ -203,6 +203,19 @@ static void __container_delete_andfree(container_t *container, void (*val_free)(
 // Hashmap Function Definitions
 // ----------------------------------------------------
 
+size_t __calc_index(uint32_t seed, size_t key, size_t len) {
+    // Rehash key
+    size_t hashed_key = murmur3_32(
+        (const uint8_t *)&key,
+        sizeof(size_t),
+        seed
+    );
+
+    // Determine bucket to insert key/value pair
+    size_t index = hashed_key % len;
+    return index;
+}
+
 hashmap_t *hashmap_new(void) {
     hashmap_t *map = malloc(sizeof(hashmap_t));
     if (!map) handle_error(strerror(errno));
@@ -295,7 +308,6 @@ int hashmap_insert(hashmap_t *map, size_t key, void *val) {
         __hashmap_rehash(map); // EXPENSIVE
     }
 
-    // Hash key
     size_t hashed_key = murmur3_32(
         (const uint8_t *)&key,
         sizeof(size_t),
@@ -314,6 +326,30 @@ int hashmap_insert(hashmap_t *map, size_t key, void *val) {
 }
 
 void *hashmap_remove(hashmap_t *map, size_t key) {
+    if (!map || !map->buckets.buf) return NULL;
+
+    // Get bucket from hashed key
+    size_t hashed_key = murmur3_32(
+        (const uint8_t *)&key,
+        sizeof(size_t),
+        map->seed
+    );
+
+    // Determine bucket to locate key/value pair
+    size_t index = hashed_key % map->buckets.len;
+    bucket_t *bucket = map->buckets.buf + index;
+
+    // Linearly search for matching key, if it exists
+    if (bucket->cap == 0) return NULL;
+    for (size_t i = 0; i < bucket->len; i++) {
+        kv_t *pair = bucket->pairs + i;
+        if (pair->key == key) {
+            // Remove from bucket - bucket should
+            // not be null, and `i` should be in-range
+            return bucket_remove(bucket, i);
+        }
+    }
+
     return NULL;
 }
 
