@@ -110,7 +110,7 @@ int global_insert(arena_t *arena) {
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
-    int success = hashmap_insert(global, (size_t) self, (void *) arena);
+    int success = hashmap_insert(global, (size_t)self, (void *)arena);
     pthread_mutex_unlock(&mutex);
     return success;
 }
@@ -120,7 +120,7 @@ arena_t *global_remove(void) {
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
-    arena_t *arena = hashmap_remove(global, (size_t) self);
+    arena_t *arena = hashmap_remove(global, (size_t)self);
     pthread_mutex_unlock(&mutex);
     return arena;
 }
@@ -130,7 +130,7 @@ arena_t *global_view(void) {
     hashmap_t *global = global_get();
     pthread_t self = pthread_self();
     pthread_mutex_lock(&mutex);
-    arena_t *arena = hashmap_get(global, (size_t) self);
+    arena_t *arena = hashmap_get(global, (size_t)self);
     pthread_mutex_unlock(&mutex);
     return arena;
 }
@@ -158,12 +158,12 @@ int global_is_empty(void) {
 /// mapping, or NULL if the mapping failed.
 /// It is recommended to handle this failure
 /// by exiting out of the program.
-static void *reserve_mem(const size_t pagesize);
+static void *__reserve_mem(const size_t pagesize);
 
 /// Attempts to map a new page of physical memory using mmap(). If
 /// successful, returns ALLOC_SUCCESS, otherwise the mapping failed
 /// and the result should be handled.
-static enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size);
+static enum AllocResult __map_new_page(arena_t *arena, const uintptr_t new_arena_size);
 
 /// Aligns the address with the specified alignment and returns the
 /// new address that the next allocation should start at.
@@ -207,7 +207,7 @@ arena_t *arena_new(void) {
     if (page_size == -1)
         handle_error("sysconf");
 
-    void *non_committed_addr = reserve_mem(page_size);
+    void *non_committed_addr = __reserve_mem(page_size);
     if (non_committed_addr == MAP_FAILED)
         handle_error(strerror(errno));
 
@@ -238,7 +238,7 @@ arena_t *arena_new(void) {
     return (arena_t *)addr;
 }
 
-static void *reserve_mem(const size_t page_size) {
+static void *__reserve_mem(const size_t page_size) {
     size_t max_alloc_space = MAX_ALLOC_SPACE;
     size_t max_num_pages = max_alloc_space / page_size;
     size_t total_page_size = max_num_pages * page_size;
@@ -277,7 +277,7 @@ void *alloc_unchecked(arena_t *arena, const size_t size) {
     dbg_line("arena_size = %lu\n", arena_size);
 
     if (arena_size + size >= arena->page_size * arena->num_pages) {
-        switch (map_new_page(arena, arena_size)) {
+        switch (__map_new_page(arena, arena_size)) {
         case OUT_OF_VIRT:
             // Error out, we hit the max
             handle_error(strerror(errno));
@@ -313,9 +313,9 @@ static uintptr_t align(const uintptr_t ptr, const size_t alignment) {
     return ret;
 }
 
-int is_power_of_two(const uintptr_t x) { return (x & (x - 1)) == 0; }
+inline int is_power_of_two(const uintptr_t x) { return (x & (x - 1)) == 0; }
 
-static enum AllocResult map_new_page(arena_t *arena, const uintptr_t new_arena_size) {
+static enum AllocResult __map_new_page(arena_t *arena, const uintptr_t new_arena_size) {
     const uintptr_t max_alloc_space = MAX_ALLOC_SPACE;
     if (new_arena_size >= max_alloc_space - arena->page_size) {
         return OUT_OF_VIRT;

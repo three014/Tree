@@ -264,9 +264,17 @@ int hashmap_insert(hashmap_t *map, size_t key, void *val) {
         __hashmap_rehash(map); // EXPENSIVE
     }
 
+    // Hash key
+    size_t hashed_key = murmur3_32(
+        (const uint8_t *)&key,
+        sizeof(size_t),
+        map->seed
+    );
+    size_t index = hashed_key % map->buckets.len;
+    bucket_t *bucket = map->buckets.buf + index;
+    bucket_push(bucket, (kv_t) {.key = key, .val = val});
 
-
-    return __FALSE;
+    return __TRUE;
 }
 
 void *hashmap_remove(hashmap_t *map, size_t key) {
