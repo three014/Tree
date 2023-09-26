@@ -134,6 +134,10 @@ void bucket_push(bucket_t *bucket, kv_t kv) {
 /// Does nothing to the original container. Returns a
 /// container struct with the parameters of the grown table,
 /// with the buffer already allocated.
+/// Note that the bucket's buffers have not been allocated,
+/// and their lengths and capacities have been set to zero.
+/// That is so the user can rehash the old containers elements
+/// and add them to the new bucket however they choose.
 static container_t __container_grow(const container_t *container) {
     size_t new_len = container->len + 1;
     new_len = max(container->len * 2, new_len);
@@ -151,12 +155,38 @@ static container_t __container_grow(const container_t *container) {
     };
 }
 
-static void __container_delete(container_t *container) {
+/// Frees the container and the underlying buckets, but
+/// purposely forgets to free the memory of the values
+/// within the key/value pairs. Use if rehashing, or
+/// if the container is already empty.
+static void __container_delete_nofree(container_t *container) {
     if (!container) return;
 
     for (size_t i = 0; i < container->len; i++) {
         bucket_t *bucket = container->buf + i;
         if (bucket->cap == 0) continue;
+        free(bucket->pairs);
+    }
+    free(container->buf);
+
+    (*container) = (container_t) {
+        .size = 0,
+        .len = 0,
+        .buf = NULL
+    };
+}
+
+/// Same as `__container_delete_nofree`, but iterates through each bucket
+/// and calls `val_free` on each value from the key/value pair.
+static void __container_delete_andfree(container_t *container, void (*val_free)(void *val)) {
+    if (!container) return;
+
+    for (size_t i = 0; i < container->len; i++) {
+        bucket_t *bucket = container->buf + i;
+        if (bucket->cap == 0) continue;
+        for (size_t j = 0; j < bucket->len; j++) {
+            val_free(bucket->pairs->val);
+        }
         free(bucket->pairs);
     }
     free(container->buf);
@@ -188,17 +218,9 @@ hashmap_t *hashmap_new(void) {
 void hashmap_delete(hashmap_t *map, void (*val_free)(void *val)) {
     if (!map) return;
     if (val_free != NULL) {
-        for (size_t i = 0; i < map->buckets.len; i++) {
-            bucket_t *bucket = map->buckets.buf + i;
-            if (bucket->cap == 0) continue;
-            for (size_t j = 0; j < bucket->len; j++) {
-                val_free(bucket->pairs->val);
-            }
-            free(bucket->pairs);
-        }
-        free(map->buckets.buf);
+        __container_delete_andfree(&map->buckets, val_free);
     } else {
-        __container_delete(&map->buckets);
+        __container_delete_nofree(&map->buckets);
     }
     free(map);
 }
@@ -212,22 +234,27 @@ static void __hashmap_rehash(hashmap_t *map) {
         for (size_t j = 0; j < bucket->len; j++) {
             kv_t *pair = bucket->pairs + j;
 
-            // Hash key again
+            // Rehash key
             size_t hashed_key = murmur3_32(
                 (const uint8_t *)&pair->key,
                 sizeof(size_t),
                 map->seed
             );
+
+            // Determine bucket to insert key/value pair
             size_t index = hashed_key % new_buckets.len;
             bucket_t *new_bucket = new_buckets.buf + index;
 
-            // Insert key/value pair into new bucket
+            // Note: This will incur a new allocation
+            // for every new bucket we push a pair into.
+            // It might be nice to allocate memory for each
+            // bucket ahead of time, but currently idk how.
             bucket_push(new_bucket, *pair);
         }
     }
 
     // Delete old container
-    __container_delete(&map->buckets);
+    __container_delete_nofree(&map->buckets);
 
     // Replace with new container
     map->buckets = new_buckets;
@@ -242,9 +269,12 @@ void *hashmap_get(hashmap_t *map, size_t key) {
         sizeof(size_t),
         map->seed
     );
+
+    // Determine bucket to locate key/value pair
     size_t index = hashed_key % map->buckets.len;
     bucket_t *bucket = map->buckets.buf + index;
 
+    // Linearly search for matching key, if it exists
     if (bucket->cap == 0) return NULL;
     for (size_t i = 0; i < bucket->len; i++) {
         kv_t *pair = bucket->pairs + i;
@@ -253,6 +283,7 @@ void *hashmap_get(hashmap_t *map, size_t key) {
         }
     }
 
+    // Key not found
     return NULL;
 }
 
@@ -270,9 +301,14 @@ int hashmap_insert(hashmap_t *map, size_t key, void *val) {
         sizeof(size_t),
         map->seed
     );
+
+    // Determine bucket to insert key/value pair
     size_t index = hashed_key % map->buckets.len;
     bucket_t *bucket = map->buckets.buf + index;
     bucket_push(bucket, (kv_t) {.key = key, .val = val});
+
+    // Update total size
+    map->buckets.size++;
 
     return __TRUE;
 }
