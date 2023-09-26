@@ -78,3 +78,6 @@ Makefile
 
 # Tests
 test-driver
+*.log
+*.trs
+check_bamboo
