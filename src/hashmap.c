@@ -185,7 +185,7 @@ static void __container_delete_andfree(container_t *container, void (*val_free)(
         bucket_t *bucket = container->buf + i;
         if (bucket->cap == 0) continue;
         for (size_t j = 0; j < bucket->len; j++) {
-            val_free(bucket->pairs->val);
+            val_free(bucket->pairs[j].val);
         }
         free(bucket->pairs);
     }
