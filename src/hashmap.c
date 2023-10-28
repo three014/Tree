@@ -1,5 +1,5 @@
 #include "hashmap.h"
-#include "error.h"
+#include "log.h"
 
 #include <errno.h>
 #include <stddef.h>
@@ -104,7 +104,10 @@ static void __bucket_reserve(bucket_t *bucket, size_t len) {
     new_cap = max(__CEILING, new_cap);
 
     void *new_ptr = realloc(bucket->pairs, sizeof(kv_t) * new_cap);
-    if (!new_ptr) handle_error(strerror(errno));
+    if (!new_ptr) {
+        __logln_err_fmt("Bucket couldn't be reallocated: %s", strerror(errno));
+        exit(1);
+    }
     bucket->pairs = new_ptr;
     bucket->cap = new_cap;
 }
@@ -145,7 +148,10 @@ static container_t __container_grow(const container_t *container) {
 
     size_t new_len_u8 = sizeof(bucket_t) * new_len;
     void *new_ptr = malloc(new_len_u8);
-    if (!new_ptr) handle_error(strerror(errno));
+    if (!new_ptr) {
+        __logln_err_fmt("Container couldn't be reallocated: %s", strerror(errno));
+        exit(1);
+    }
     (void)memset(new_ptr, 0, new_len_u8);
 
     return (container_t) {
@@ -217,7 +223,10 @@ size_t __calc_index(uint32_t seed, size_t key, size_t len) {
 
 hashmap_t *hashmap_new(void) {
     hashmap_t *map = malloc(sizeof(hashmap_t));
-    if (!map) handle_error(strerror(errno));
+    if (!map) {
+        __logln_err_fmt("Couldn't allocate new hashmap: %s", strerror(errno));
+        exit(1);
+    }
 
     (*map) = (hashmap_t) {
         .seed = time(0),

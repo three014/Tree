@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
 
 #include "arena.h"
-#include "error.h"
+#include "log.h"
 #include "hashmap.h"
 
 #include <assert.h>
@@ -204,18 +204,22 @@ arena_t *arena_new(void);
 
 arena_t *arena_new(void) {
     long page_size = sysconf(_SC_PAGE_SIZE);
-    if (page_size == -1)
-        handle_error("sysconf");
+    if (page_size == -1) {
+        __logln_err_fmt("Sysconf: %s", strerror(errno));
+        exit(1);
+    }
 
     void *non_committed_addr = __reserve_mem(page_size);
-    if (non_committed_addr == MAP_FAILED)
-        handle_error(strerror(errno));
+    if (non_committed_addr == MAP_FAILED) {
+        __logln_err_fmt("Failed to reserve memory for arena: %s", strerror(errno));
+        exit(1);
+    }
 
-    void *addr = mmap(non_committed_addr, page_size + 1, PROT_READ | PROT_WRITE,
+    void *addr = mmap(non_committed_addr, page_size, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
     if (addr == MAP_FAILED) {
-        fprintf(stderr, "%s\n", strerror(errno));
+        __logln_warn_fmt("%s", strerror(errno));
         return NULL;
     }
 
@@ -232,7 +236,8 @@ arena_t *arena_new(void) {
 
     int success = global_insert((arena_t *) addr);
     if (!success) {
-        handle_error("There can't be more than one arena per thread right now!");
+        __logln_err("There currently can't be more than one arena per thread");
+        exit(1);
     }
 
     return (arena_t *)addr;
@@ -272,16 +277,14 @@ void *alloc_unchecked(arena_t *arena, const size_t size) {
     const uintptr_t offset = align(cur_addr, DEFAULT_ALIGNMENT);
     const uintptr_t arena_size = offset - (uintptr_t)arena;
 
-    dbg_line("cur_addr = %lu\n", cur_addr);
-    dbg_line("offset = %lu\n", offset);
-    dbg_line("arena_size = %lu\n", arena_size);
-
     if (arena_size + size >= arena->page_size * arena->num_pages) {
         switch (__map_new_page(arena, arena_size)) {
         case OUT_OF_VIRT:
             // Error out, we hit the max
-            handle_error(strerror(errno));
+            __logln_err_fmt("%s", strerror(errno));
+            exit(1);
         case ALLOC_FAILED:
+            __logln_warn("Could not map a new page");
             return NULL;
         case ALLOC_SUCCESS:
             arena->num_pages++;
@@ -323,17 +326,13 @@ static enum AllocResult __map_new_page(arena_t *arena, const uintptr_t new_arena
 
     void *next_addr = arena + arena->page_size;
 
-    dbg_line("next_addr = %lu\n", (uintptr_t)next_addr);
-
     next_addr = mmap(next_addr, arena->page_size + 1, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
     if (next_addr == MAP_FAILED) {
-        fprintf(stderr, "%s\n", strerror(errno));
+        __logln_err_fmt("%s", strerror(errno));
         return ALLOC_FAILED;
     }
-
-    dbg_line("mmap returned addr: %lu\n", (size_t)next_addr);
 
     return ALLOC_SUCCESS;
 }
